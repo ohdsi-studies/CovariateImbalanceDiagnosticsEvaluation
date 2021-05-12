@@ -1,0 +1,16 @@
+analysis_id,sample_perc,ps_adjustment,balance_approach
+1,1,matchOnPs,tco
+2,2,matchOnPs,tco
+3,5,matchOnPs,tco
+4,10,matchOnPs,tco
+5,20,matchOnPs,tco
+6,1,crude,tco
+7,2,crude,tco
+8,5,crude,tco
+9,10,crude,tco
+10,20,crude,tco
+11,1,random,tco
+12,2,random,tco
+13,5,random,tco
+14,10,random,tco
+15,20,random,tco

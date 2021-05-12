@@ -1,0 +1,5 @@
+atlasId,atlasName,cohortId,name,entityType
+21366,[EPI_851] New users of beta-blockers,21366,NewUsersOfBetaBlockers,C
+21364,[EPI_851] New users of ACE-inhibitors,21364,NewUsersOfAceInhibitors,T
+21365,[EPI_851] New users of thiazides or thiazide-like diuretics,21365,NewUsersOfThiazides,C
+21638,[EPI_851] Angioedema,21638,Angioedema,O
