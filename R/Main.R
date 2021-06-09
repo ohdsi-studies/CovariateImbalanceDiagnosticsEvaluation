@@ -16,10 +16,10 @@
 
 
 
-#' Execute the Study
+#' Execute the study
 #'
 #' @details
-#' This function executes the Study.
+#' This function executes the study.
 #'
 #' @param connectionDetails    An object of type \code{connectionDetails} as created using the
 #'                             \code{\link[DatabaseConnector]{createConnectionDetails}} function in the
@@ -36,14 +36,20 @@
 #' @param outputFolder         Name of local folder to place results; make sure to use forward slashes
 #'                             (/). Do not use a folder on a network drive since this greatly impacts
 #'                             performance.
-#' @param databaseId            A short string for identifying the database (e.g. 'Synpuf').
+#' @param databaseId           A short string for identifying the database (e.g. 'Synpuf').
+#' @param packageName          The name of the package, added for flexibility in package naming convention with find/replace.
+#' @param randomSeed           The seed to use for random samples - for greater reproducibility.
 #' @param databaseName          The full name of the database.
 #' @param databaseDescription   A short description (several sentences) of the database.
-#' @param minCellCount          The minimum cell count for fields contains person counts or fractions.
 #' @param maxCores             How many parallel cores should be used? If more cores are made available
 #'                             this can speed up the analyses.
+#' @param maxCohortSize        The largest cohort size to be used when creating \code{CohortMethod} data objects.
 #' @param createCohorts        Create the exposure and outcome cohorts?
-#' @param runCohortMethod      Perform cohort method analysis?
+#' @param synthesizePositiveControls Create synthetic positive controls using \code{MethodEvaluation} package?
+#' @param createCohortMethodObjects      Create the CohortMethod data objects?
+#' @param generateAnalysisObjects Computes the balance objects, fits outcome models, and generates population meta-data.
+#' @param synthesizeAndExportResults Synthesize results across analyses?
+#' @param verbose Should verbose logging be used?
 #'
 #' @export
 execute <- function(connectionDetails,
@@ -52,11 +58,8 @@ execute <- function(connectionDetails,
                     cohortTable,
                     outputFolder,
                     databaseId,
-                    populationSampleSizes,
-                    # samplePercentage,
-                    psAdjustments,
                     packageName,
-                    randomSeed,
+                    randomSeed = 123,
                     databaseName = databaseId,
                     databaseDescription = databaseId,
                     maxCores = parallel::detectCores() - 1,
@@ -64,13 +67,12 @@ execute <- function(connectionDetails,
                     createCohorts = FALSE,
                     synthesizePositiveControls = FALSE,
                     createCohortMethodObjects = FALSE,
-                    # partitionPop = FALSE,
                     generateAnalysisObjects  = FALSE,
-                    synthesizeResults = FALSE,
+                    synthesizeAndExportResults = FALSE,
                     verbose = TRUE) {
 
 
-  ParallelLogger::addDefaultFileLogger(file.path(outputFolder, "log.txt"))
+  ParallelLogger::addDefaultFileLogger(file.path(outputFolder, "covBalanceLog.txt"))
   ParallelLogger::addDefaultErrorReportLogger(file.path(outputFolder, "errorReportR.txt"))
   on.exit(ParallelLogger::unregisterLogger("DEFAULT_FILE_LOGGER", silent = TRUE))
   on.exit(ParallelLogger::unregisterLogger("DEFAULT_ERRORREPORT_LOGGER", silent = TRUE), add = TRUE)
@@ -80,7 +82,7 @@ execute <- function(connectionDetails,
     ParallelLogger::logInfo(sprintf("Starting database %s at %s", databaseId, startTime))
 
   if (!file.exists(outputFolder)) {
-    dir.create(outputFolder, recursive = TRUE)
+    dir.create(outputFolder, recursive = TRUE, showWarnings = FALSE)
   }
 
 
@@ -88,7 +90,7 @@ execute <- function(connectionDetails,
   # create cohorts (exposure, outcome, negative controls)
   if (createCohorts && !file.exists(getCohortCountsFile(outputFolder))) {
     if (verbose)
-      ParallelLogger::logInfo("Creating exposure and outcome cohorts")
+      ParallelLogger::logInfo("Creating exposure, outcome, and negative control cohorts")
     createCohorts(connectionDetails = connectionDetails,
                   cdmDatabaseSchema = cdmDatabaseSchema,
                   cohortDatabaseSchema = cohortDatabaseSchema,
@@ -126,20 +128,12 @@ execute <- function(connectionDetails,
                               outputFolder = outputFolder,
                               packageName = packageName,
                               maxCores = maxCores,
+                              createStudyPops = FALSE,
                               maxCohortSize = maxCohortSize,
                               serializeObjects = TRUE,
                               verbose = verbose)
   }
 
-
-  # partition population
-  # if(partitionPop) {
-  #   if(verbose)
-  #     ParallelLogger::logInfo("Partitioning population")
-  #   partitionPopulation(cmOutputFolder = getCmFolderPath(outputFolder),
-  #                       samplePercentage = samplePercentage,
-  #                       maxCores = maxCores)
-  # }
 
 
 
@@ -156,7 +150,7 @@ execute <- function(connectionDetails,
   if(synthesizeResults) {
     if(verbose)
       ParallelLogger::logInfo("Exporting results")
-    synthesizeAndExportResults(resultsFolder = getResultsFolderPath(outoutFolder = outputFolder),
+    synthesizeAndExportResults(resultsFolder = getResultsFolderPath(outputFolder = outputFolder),
                                cmOutputFolder = getCmFolderPath(outputFolder = outputFolder),
                                databaseId = databaseId,
                                maxCores = maxCores,

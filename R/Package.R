@@ -16,7 +16,6 @@
 # limitations under the License.
 #'
 #'
-#' @export
 packageResults <- function(baseOutputFolder, dbs) {
   allResults <- NULL
   for (db in dbs) {
@@ -26,7 +25,7 @@ packageResults <- function(baseOutputFolder, dbs) {
     dbResults <- NULL
     for(analysisFolder in analysisFolders) {
       analysisId <- gsub("Analysis_", "", analysisFolder) %>% as.numeric()
-      resultsFile <- getAnalysisSummaryFileName(analysisId = analysisId)
+      resultsFile <- getAnalysisBalanceSummaryFileName(analysisId = analysisId)
       resultsFile <- file.path(cmoutputFolder, analysisFolder, resultsFile)
       if(!file.exists(resultsFile))
         next

@@ -1,5 +1,8 @@
 library(magrittr)
 
+#TODO: update for auth with webAPi
+stop(1)
+
 overwrite <- TRUE
 atlasCohorts <- data.frame(atlasName = c("[EPI_851] New users of beta-blockers",
                   "[EPI_851] New users of ACE-inhibitors",

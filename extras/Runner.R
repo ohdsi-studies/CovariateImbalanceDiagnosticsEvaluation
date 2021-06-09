@@ -1,9 +1,12 @@
 
-
+if(length(ls()) > 0) {
+  writeLines("********* Consider clearing environment before running... *********")
+  # invisible(readline(prompt = "Press any key to continue."))
+}
 library(CovarBalDiagEval)
 
 if(packageVersion("FeatureExtraction") < "3.1.1")
-  stop("Need to update FE!")
+  stop("Need to update FeatureExtraction to >= 3.1.1!")
 
 packageName <- "CovarBalDiagEval"
 baseOutputFolder <- "d:/studies/CovarBalDiagEval"
@@ -84,39 +87,18 @@ dbScratchSpaces <- c(keyring::key_get("OPTUM_DOD_SCRATCH_SCHEMA"),
                      keyring::key_get("IBM_MDCR_SCRATCH_SCHEMA"))
 
 
-outFolders <- c(file.path(baseOutputFolder, "OPTUM_DOD"),
-                file.path(baseOutputFolder, "IBM_CCAE"),
-                file.path(baseOutputFolder, "OPTUM_PANTHER"),
-                file.path(baseOutputFolder, "IBM_MDCR"))
-
-i <- 1
+# i <- 2
 for (i in 1:length(dbIds)) {
 
 
   databaseId <- dbIds[[i]]
+
   outputFolder <- file.path(baseOutputFolder, databaseId)
 
   connectionDetails <- dbConnectionDetails[[i]]
   databaseName <- dbNames[[i]]
   databaseDescription <- dbDescriptions[[i]]
   cohortDatabaseSchema <- dbScratchSpaces[[i]]
-
-  # connectionDetails <-
-  #   DatabaseConnector::createConnectionDetails(
-  #     dbms = "redshift",
-  #     server = paste(keyring::key_get(sprintf("%s_URL", db)),
-  #                     keyring::key_get(sprintf("%s_DATABASE", db)),
-  #                     sep = "/"),
-  #     user = keyring::key_get("REDSHIFT_USER"),
-  #     password = keyring::key_get("REDSHIFT_PASSWORD"),
-  #     port = keyring::key_get(sprintf("%s_PORT", db))
-  #   )
-  #
-  #
-  # cohortDatabaseSchema <- keyring::key_get(sprintf("%s_SCRATCH_SCHEMA", db))
-  # databaseId <- db
-  # databaseName <- keyring::key_get(sprintf("%s_DB_NAME", db))
-  # databaseDescription <- keyring::key_get(sprintf("%s_DB_DESCRIPTION", db))
 
 
   execute(
@@ -131,16 +113,19 @@ for (i in 1:length(dbIds)) {
     packageName = packageName,
     maxCores = maxCores,
     maxCohortSize = maxCohortSize,
-    # samplePercentage = samplePercentage,
     createCohorts = FALSE,
     synthesizePositiveControls = FALSE,
-    createCohortMethodObjects = TRUE,
-    # partitionPop = TRUE,
-    generateAnalysisObjects = TRUE,
-    synthesizeResults = FALSE,
+    createCohortMethodObjects = FALSE,
+    generateAnalysisObjects = FALSE,
+    synthesizeAndExportResults = FALSE,
     verbose = TRUE,
     randomSeed = randomSeed
   )
 
-
 }
+
+
+synthesizeResults(baseOutputFolder = baseOutputFolder,
+                  packageName = packageName,
+                  dbIds = dbIds)
+

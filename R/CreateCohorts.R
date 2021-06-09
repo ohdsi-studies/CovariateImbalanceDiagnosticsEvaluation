@@ -20,20 +20,24 @@ createCohorts <- function(connectionDetails,
                           cohortDatabaseSchema,
                           cohortTable,
                           outputFolder,
-                          packageName) {
+                          packageName,
+                          verbose) {
   connection <- DatabaseConnector::connect(connectionDetails)
   on.exit(DatabaseConnector::disconnect(connection))
 
-  ParallelLogger::logInfo("Creating base exposure cohorts")
+  if (verbose)
+    ParallelLogger::logInfo("Creating base exposure cohorts")
   .createCohorts(connection = connection,
                  cdmDatabaseSchema = cdmDatabaseSchema,
                  cohortDatabaseSchema = cohortDatabaseSchema,
                  cohortTable = cohortTable,
                  outputFolder = outputFolder,
-                 packageName = packageName)
+                 packageName = packageName,
+                 verbose = verbose)
 
 
-  ParallelLogger::logInfo("Creating negative control outcome cohorts")
+  if (verbose)
+    ParallelLogger::logInfo("Creating negative control outcome cohorts")
   negativeControls <- loadNegativeControls(packageName)
   sql <- SqlRender::loadRenderTranslateSql("NegativeControlOutcomes.sql",
                                            packageName = packageName,
@@ -70,7 +74,8 @@ createCohorts <- function(connectionDetails,
                            cohortDatabaseSchema,
                            cohortTable,
                            outputFolder,
-                           packageName) {
+                           packageName,
+                           verbose) {
 
   # Create study cohort table structure:
   sql <- SqlRender::loadRenderTranslateSql(sqlFilename = "CreateCohortTable.sql",
@@ -85,7 +90,8 @@ createCohorts <- function(connectionDetails,
   # Instantiate cohorts:
   cohortsToCreate <- loadCohortsToCreate(packageName)
   for (i in 1:nrow(cohortsToCreate)) {
-    ParallelLogger::logInfo(paste("Creating cohort:", cohortsToCreate$name[i]))
+    if (verbose)
+      ParallelLogger::logInfo(paste("Creating cohort:", cohortsToCreate$name[i]))
     sql <- SqlRender::loadRenderTranslateSql(sqlFilename = paste0(cohortsToCreate$name[i], ".sql"),
                                              packageName = packageName,
                                              dbms = connection@dbms,

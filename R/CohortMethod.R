@@ -14,32 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#' Run CohortMethod package
-#'
-#' @details
-#' Generates the cohort method data and trains the shared PS.
-#'
-#' @param connectionDetails    An object of type \code{connectionDetails} as created using the
-#'                             \code{\link[DatabaseConnector]{createConnectionDetails}} function in the
-#'                             DatabaseConnector package.
-#' @param cdmDatabaseSchema    Schema name where your patient-level data in OMOP CDM format resides.
-#'                             Note that for SQL Server, this should include both the database and
-#'                             schema name, for example 'cdm_data.dbo'.
-#' @param cohortDatabaseSchema Schema name where intermediate data can be stored. You will need to have
-#'                             write priviliges in this schema. Note that for SQL Server, this should
-#'                             include both the database and schema name, for example 'cdm_data.dbo'.
-#' @param cohortTable          The name of the table that will be created in the work database schema.
-#'                             This table will hold the exposure and outcome cohorts used in this
-#'                             study.
-#' @param oracleTempSchema     Should be used in Oracle to specify a schema where the user has write
-#'                             priviliges for storing temporary tables.
-#' @param outputFolder         Name of local folder where the results were generated; make sure to use forward slashes
-#'                             (/). Do not use a folder on a network drive since this greatly impacts
-#'                             performance.
-#' @param maxCores             How many parallel cores should be used? If more cores are made available
-#'                             this can speed up the analyses.
-#'
-#' @export
 createCohortMethodObjects <- function(connectionDetails,
                             cdmDatabaseSchema,
                             cohortDatabaseSchema,
@@ -51,29 +25,36 @@ createCohortMethodObjects <- function(connectionDetails,
                             maxCohortSize,
                             createStudyPops = FALSE,
                             serializeObjects = TRUE,
-                            verbose = TRUE) {
+                            verbose) {
 
   cmOutputFolder <- getCmFolderPath(outputFolder)
   if (!file.exists(cmOutputFolder)) {
     dir.create(cmOutputFolder)
   }
 
+  # get TCOs
   targetComparatorOutcomesList <- createTcos(outputFolder = outputFolder, packageName = packageName)
   outcomeIdsOfInterest <- getOutcomesOfInterest(packageName = packageName)
 
+  # list of target IDs
   targetIds <- unique(sapply(targetComparatorOutcomesList, function(x) {x$targetId}))
+  # list of comparator IDs
   comparatorIds <- unique(sapply(targetComparatorOutcomesList, function(x) {x$comparatorId}))
+  # parse target concept IDs
   targetConcepts <- do.call(c, sapply(targetIds, FUN = getDrugConceptsForCohort, packageName, simplify=FALSE))
+  # parse comparator concept IDs
   comparatorConcepts <- do.call(c, sapply(comparatorIds, FUN = getDrugConceptsForCohort, packageName, simplify=FALSE))
 
 
+  # exclude target and comparator concept IDs, plus descendants
   covariateSettings <- FeatureExtraction::createDefaultCovariateSettings(excludedCovariateConceptIds = c(targetConcepts, comparatorConcepts),
                                        addDescendantsToExclude = TRUE)
+
 
   getDbCohortMethodDataArgs <- CohortMethod::createGetDbCohortMethodDataArgs(washoutPeriod = 365,
                                                      restrictToCommonPeriod = FALSE,
                                                      firstExposureOnly = TRUE,
-                                                     removeDuplicateSubjects = "remove all", #keep first
+                                                     removeDuplicateSubjects = "remove all",
                                                      studyStartDate = "",
                                                      studyEndDate = "",
                                                      covariateSettings = covariateSettings,
@@ -83,6 +64,7 @@ createCohortMethodObjects <- function(connectionDetails,
   createStudyPopArgs <- CohortMethod::createCreateStudyPopulationArgs()
   psArgs <- CohortMethod::createCreatePsArgs()
 
+  # just needed to generate cohort method data object and fit shared propensity score
   cmAnalysis1 <- CohortMethod::createCmAnalysis(
     analysisId = 1,
     description = "CM / Study Pop Construction",
@@ -120,6 +102,7 @@ createCohortMethodObjects <- function(connectionDetails,
                                          prefilterCovariates = FALSE,
                                          outcomeIdsOfInterest = outcomeIdsOfInterest)
 
+  # create study population for all control outcomes?
   if(createStudyPops) {
 
 
@@ -143,8 +126,6 @@ createCohortMethodObjects <- function(connectionDetails,
       return(args)
     }
 
-    # subset <- subset[c(2, 3), ]
-    #TODO:
     if (nrow(subset) == 0) {
       studyPopTasks <- list()
     } else {

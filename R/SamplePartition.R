@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#' @export
 partitionPopulation <- function(cmOutputFolder,
                              sampleFolder = NULL,
                              maxCores,
@@ -84,10 +83,11 @@ createPartition <- function(args) {
 
 partitionPropensityPop <- function(ps, numPartitions, randomSeed) {
   if(numPartitions %% 1 != 0)
-    stop(1)
+    stop("numPartitions must be an integer")
   set.seed(randomSeed)
   popSize <- nrow(ps)
   partitionIds <- sample(1:numPartitions, size = popSize, replace = TRUE)
   ps[, "partition"] <- partitionIds
+  set.seed(NULL)
   return(ps)
 }

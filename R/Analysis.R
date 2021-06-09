@@ -96,12 +96,12 @@ generateAnalysisObjects <- function(cmOutputFolder,
   }
 
   analysisTasks <- lapply(1:nrow(subset), createAnalysisTask)
-  # params <- analysisTasks[[3000]]
+  #params <- analysisTasks[[1]]
 
 
   ParallelLogger::logInfo("Generating analysis objects")
   if (length(analysisTasks) != 0) {
-    cluster <- ParallelLogger::makeCluster(min(15, maxCores))
+    cluster <- ParallelLogger::makeCluster(min(12, maxCores))
     ParallelLogger::clusterRequire(cluster, packageName)
     ParallelLogger::clusterRequire(cluster, "CohortMethod")
     dummy <- ParallelLogger::clusterApply(cluster, analysisTasks, createAnalysisObjects, cmOutputFolder, randomSeed)
@@ -142,7 +142,8 @@ addFileNames <- function(analyses) {
 
 createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
 
-  analysisFolder <- file.path(cmOutputFolder, sprintf("Analysis_%d", params$analysisId))
+
+  analysisFolder <- getAnalysisFolderPath(cmOutputFolder = cmOutputFolder, analysisId =  params$analysisId)
   outcomeModelFolder <- getOutcomeModelFolderPath(analysisFolder) # change back to analysisFolder if no longer shared
   balanceFolder <- getBalanceFolderPath(analysisFolder)
 
@@ -168,8 +169,8 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
 
   # change if we start serializing more objects
   outFiles <- c(balanceFiles, outcomeModelFile)
-  if(all(sapply(outFiles, file.exists)))
-    return(NULL)
+  # if(all(sapply(outFiles, file.exists)))
+  #   return(NULL)
 
   # read shared propensity score file and sample population
   sharedPs <- readRDS(params$sharedPsFile)
@@ -190,11 +191,45 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
     ps <- sharedPs %>%
       filter(.data$partition == partitionId)
 
-    #TODO: does outcome matter?  For crude/random, no, but for matchonPs, yes since study pop is being manipulated
     balanceFile <- balanceFiles[[partitionId]]
 
+    # compute balance
+    if(!file.exists(balanceFile) && params$balanceApproach != "tco") {
+
+      if (params$psAdjustment == "matchOnPs") {
+        args <- list(population = ps)
+        args <- append(args, params$matchOnPsArgs)
+        ps <- do.call("matchOnPs", args)
+      } else if (params$psAdjustment == "random") {
+        set.seed(randomSeed)
+        ps$treatment <- sample(ps$treatment, size = nrow(ps), replace = FALSE)
+        set.seed(NULL)
+      }
+
+      ################################# HERE ##################################
+      ######################### FUTURE GRAB STUDY POP? ##################################
+
+      args <- list(population = ps)
+      args$cohortMethodData <- cohortMethodData
+      # args$allCov <- allCov
+      # args$includeBefore <- FALSE #params$psAdjustment == "matchOnPs"
+      balance <- do.call('computeCovariateBalanceFeatureExtraction', args)
+      saveRDS(balance, balanceFile)
+    }
+
+    tmp <- ps %>% group_by(treatment) %>%
+      summarise(count = n()) %>%
+      select(-treatment) %>%
+      t() %>%
+      as.data.frame()
+    names(tmp) <- c("comparatorPersonsBeforeStudyPop", "targetPersonsBeforeStudyPop")
+    tmp$analysisId <- params$analysisId
+    tmp$targetId <- params$targetId
+    tmp$comparatorId <- params$comparatorId
+    tmp$outcomeId <- params$outcomeId
+
     # will always evaluate to TRUE at the moment since not serializing the object
-    if(!file.exists(strataPopFile)) {
+    if (!file.exists(strataPopFile)) {
       args <- list(population = ps)
       args$cohortMethodData <- cohortMethodData
       args$outcomeId <- params$outcomeId
@@ -206,13 +241,11 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
 
     l <- CohortMethod::computeMdrr(ps)
     l$partition <- partitionId
-    if(is.null(popSummary))
-      popSummary <- l
-    else
-      popSummary <- rbind(popSummary, l)
+    l <- cbind(l, tmp)
+    rm(tmp)
 
 
-    if(params$psAdjustment == "crude") {
+    if (params$psAdjustment == "crude") {
       # saveRDS(ps, file = strataPopFile)
     } else if (params$psAdjustment == "matchOnPs") {
       args <- list(population = ps)
@@ -224,11 +257,26 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
       ps[, "treatment_orig"] <- ps$treatment # no reason to capture, since no longer persisting
       # weights <- if(FALSE) c(0.5, 0.5) else ps$treatment %>% table() %>% nrow(ps) %>% as.vector()
       # ps$treatment <- sample(c(0, 1), size = nrow(ps), replace = TRUE, prob = weights)
+      set.seed(randomSeed)
       ps$treatment <- sample(ps$treatment, size = nrow(ps), replace = FALSE)
       # saveRDS(ps, file = strataPopFile)
     }
 
-    if(params$computeBalance && !file.exists(balanceFile)) {
+    tmp <- ps %>% group_by(treatment) %>%
+      summarise(count = n()) %>%
+      select(-treatment) %>%
+      t() %>%
+      as.data.frame()
+    names(tmp) <- c("comparatorPersonsPostMatching", "targetPersonsPostMatching")
+    l <- cbind(l, tmp)
+    rm(tmp)
+
+    if(is.null(popSummary))
+      popSummary <- l
+    else
+      popSummary <- rbind(popSummary, l)
+
+    if (params$computeBalance && !file.exists(balanceFile)) {
       args <- list(population = ps)
       args$cohortMethodData <- cohortMethodData
       # args$allCov <- allCov
@@ -236,7 +284,7 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
       balance <- do.call('computeCovariateBalanceFeatureExtraction', args)
       saveRDS(balance, balanceFile)
     }
-    if(is.null(wholePop))
+    if (is.null(wholePop))
       wholePop <- ps
     else
       wholePop <- rbind(wholePop, ps)
@@ -246,16 +294,7 @@ createAnalysisObjects <- function(params, cmOutputFolder, randomSeed) {
   readr::write_csv(popSummary, popSummaryFile)
   saveRDS(wholePop, analysisPopFile)
 
-  if(params$fitOutcomeModel && !file.exists(outcomeModelFile)) {
-    # args <- list(population = sharedPs)
-    # args$cohortMethodData <- cohortMethodData
-    # args$outcomeId <- params$outcomeId
-    # ps <- do.call("createStudyPopulation", args)
-
-    #TODO: when fitting outcome model, should we concatenate all samples
-    #     after individual study Pops, adjusting? Or take original pop, create
-    #     study pop, then adjust? (Only makes a difference for matching analysis)
-
+  if (params$fitOutcomeModel && !file.exists(outcomeModelFile)) {
     args <- list(population = wholePop)
     args$cohortMethodData <- cohortMethodData
     args <- append(args, params$outcomeModelArgs)

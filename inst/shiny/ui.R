@@ -2,28 +2,42 @@ fluidPage(
   titlePanel(""),
   sidebarLayout(
     sidebarPanel(
-      selectInput(inputId = "sampleSize",
-                  label = "Sample Size",
-                  choices = unique(results$sampleSize)),
-      selectInput(inputId = "psAdjustment",
-                  label = "Adjustment",
-                  choices = unique(results$psAdjustment)),
-      selectInput(inputId = "targetId",
-                  label = "Target",
-                  choices = unique(results$targetId)),
-      selectInput(inputId = "compartorId",
-                  label = "Comparator",
-                  choices = unique(results$comparatorId)),
-      selectInput(inputId = "outcomeId",
-                  label = "Outcome",
-                  choices = unique(results$outcomeId)),
+      selectInput(inputId = "targetName",
+                  label = "Target Exposure",
+                  choices = unique(balanceResults$targetName)),
+      selectInput(inputId = "comparatorName",
+                  label = "Comparator Exposure",
+                  choices = unique(balanceResults$comparatorName)),
       selectInput(inputId = "databaseId",
                   label = "Database",
-                  choices = unique(results$databaseId))
+                  choices = unique(balanceResults$databaseId)),
+      checkboxGroupInput(inputId = "psAdjustment",
+                         label = "Adjustment Method",
+                         choices = unique(balanceResults$psAdjustment),
+                         selected = unique(balanceResults$psAdjustment)),
+      selectInput(inputId = "balanceAggregateStatistic",
+                  label = "Balance Statistic(s)",
+                  choices = getBalanceFeasibleStatistics(balanceResults),
+                  selected = NULL,
+                  multiple = TRUE),
+      selectInput(inputId = "partitionAggregation",
+                  label = "Partition Aggregation Function",
+                  choices = c("mean", "max", "min"),
+                  selected = "mean")
     ),
     mainPanel(
-      reactableOutput(outputId = "resultsTable")
+      plotOutput(outputId = "mainPlot"),
+      tabsetPanel(
+        tabPanel(
+          "Balance Results",
+          reactableOutput(outputId = "balanceResultsTable")
+        ),
+        tabPanel(
+          "CohortMethod/ESE Results",
+          reactableOutput(outputId = "eseResultsTable")
 
+        )
+      )
     )
   )
 )

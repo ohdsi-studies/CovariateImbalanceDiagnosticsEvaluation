@@ -14,24 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#' Synthesizes and exports all results to tables
-#'
-#' @description
-#' Outputs all results to a results folder.
-#'
-#' @param resultsFolder         Path to folder where results should be persistsed
-#' @param cmOutputFolder        Name of local folder where CM objects are saved
-#' @param databaseId            A short string for identifying the database (e.g. 'Synpuf').
-#' @param maxCores              How many parallel cores should be used? If more cores are made
-#'                              available this can speed up the analyses.
-#'
-#' @export
+
 synthesizeAndExportResults <- function(resultsFolder,
                           cmOutputFolder,
                           databaseId,
                           maxCores,
                           packageName,
-                          absoluteSdm = TRUE) {
+                          absoluteSdm = TRUE,
+                          combineAnalyses = TRUE) {
 
   maybeMakeDir(resultsFolder)
   analyses <- readr::read_csv(
@@ -64,7 +54,9 @@ synthesizeAndExportResults <- function(resultsFolder,
                     "args" = list(na.rm = TRUE)),
     "propGtThresh" = list("func" = "getPropGtThreshold",
                           "args" = list(threshold = 0.1,
-                                        na.rm = TRUE))
+                                        na.rm = TRUE)),
+    "numCov" = list("func" = "getNumCov",
+                    "args" = list(na.rm = TRUE))
   )
 
   tcosList <- createTcos(outputFolder, packageName)
@@ -90,13 +82,13 @@ synthesizeAndExportResults <- function(resultsFolder,
     args <- list()
     args$analysisId <- analysis$analysisId
     args$samplePerc <- analysis$samplePerc
-    args$analysisSummaryFile <- getAnalysisSummaryFileName(analysis$analysisId)
+    args$balanceApproach <- analysis$balanceApproach
     return(args)
   }
 
 
   summaryTasks <- lapply(1:length(unique(analyses$analysisId)), createSummaryTask)
-  params <- summaryTasks[[1]]
+  # params <- summaryTasks[[7]]
   if (length(summaryTasks) != 0) {
     cluster <- ParallelLogger::makeCluster(min(14, maxCores))
     ParallelLogger::clusterRequire(cluster, packageName)
@@ -110,6 +102,40 @@ synthesizeAndExportResults <- function(resultsFolder,
     ParallelLogger::stopCluster(cluster)
   }
 
+  if(combineAnalyses) {
+    combinedStudyPops <- NULL
+    combinedBalanceResults <- NULL
+    combinedEseResults <- NULL
+    for(i in 1:nrow(analyses)) {
+      analysis <- analyses[i, ]
+      analysisFolder <- getAnalysisFolderPath(cmOutputFolder, analysis$analysisId)
+      analysisBalanceFile <- file.path(analysisFolder, getAnalysisBalanceSummaryFileName(analysis$analysisId))
+      analysisEseFile <- file.path(analysisFolder, getAnalysisEseSummaryFileName(analysis$analysisId))
+      analysisPopFile <- file.path(analysisFolder, getAnalysisPopSummarySummaryFileName(analysis$analysisId))
+
+      analysisBalanceResults <- readr::read_csv(analysisBalanceFile, col_types = readr::cols())
+      analysisEseResults <- readr::read_csv(analysisEseFile, col_types = readr::cols())
+      analysisPopResults <- readr::read_csv(analysisPopFile, col_types = readr::cols())
+      if(is.null(combinedBalanceResults)) {
+        combinedBalanceResults <- analysisBalanceResults
+        combinedEseResults <- analysisEseResults
+        combinedStudyPops <- analysisPopResults
+      } else {
+        combinedBalanceResults<- rbind(combinedBalanceResults, analysisBalanceResults)
+        combinedEseResults<- rbind(combinedEseResults, analysisEseResults)
+        combinedStudyPops<- rbind(combinedStudyPops, analysisPopResults)
+      }
+    }
+
+    balanceOutputFile <- file.path(resultsFolder, getCombinedBalanceFileName(databaseId))
+    eseOutputFile <- file.path(resultsFolder, getCombinedEseFileName(databaseId))
+    popOutputFile <- file.path(resultsFolder, getCombinedPopFileName(databaseId))
+    readr::write_csv(combinedBalanceResults, file = balanceOutputFile)
+    readr::write_csv(combinedEseResults, file = eseOutputFile)
+    readr::write_csv(combinedStudyPops, file = popOutputFile)
+    ParallelLogger::logInfo(sprintf("Results for database serialized to %s", resultsFolder))
+  }
+
 
 }
 
@@ -120,40 +146,58 @@ getPropGtThreshold <- function(x, threshold, na.rm) {
   return(length(x[x > threshold]) / length(x))
 }
 
+
+getNumCov <- function(x, na.rm) {
+  if(na.rm)
+    return(length(x[!is.na(x)]))
+  return(length(x))
+}
+
 summarizeAnalysis <- function(params, cmOutputFolder, tcos, balanceStatsToCompute, analyses, outcomesOfInterest,
                               absolute = TRUE) {
 
   analysisFolder <- file.path(cmOutputFolder, sprintf("Analysis_%d", params$analysisId))
-  outputFile <- file.path(analysisFolder, getAnalysisSummaryFileName(params$analysisId))
-  nullDistFile <- file.path(analysisFolder, getMcmcNullFileName(params$analysisId))
-
-  # if(file.exists(outputFile))
-  #   return(NULL)
+  balanceOutputFile <- file.path(analysisFolder, getAnalysisBalanceSummaryFileName(params$analysisId))
+  eseOutputFile <- file.path(analysisFolder, getAnalysisEseSummaryFileName(params$analysisId))
+  popSummaryOutputFile <- file.path(analysisFolder, getAnalysisPopSummarySummaryFileName(params$analysisId))
 
 
-  colNames <- c("analysisId", "partitionId", "targetId", "comparatorId", "outcomeId")
+  # end balance summarization
+  colNames <- c("analysisId", "partitionId", "targetId", "comparatorId")
+  if(params$balanceApproach == "tco")
+    colNames <- c(colNames, "outcomeId")
   colNames <- c(colNames, sapply(names(balanceStatsToCompute), function(x) {paste(x, "Dichotomous", sep = "")}))
   colNames <- c(colNames, sapply(names(balanceStatsToCompute), function(x) {paste(x, "Continuous", sep = "")}))
   # colNames <- c(colNames, names(balanceStatsToCompute))
-  treatmentEstimates <- c("logRr", "logLb95", "logUb95", "seLogRr")
-  colNames <- c(colNames, treatmentEstimates)
 
   numPartitions <- getNumPartitions(params$samplePerc)
   results <- matrix(, nrow = 0, ncol = length(colNames))
-  for(i in 1:nrow(tcos)) {
-    tco <- tcos[i, ]
-    outcomeModelFile <- getOutcomeModelFileName(targetId = tco$targetId, comparatorId = tco$comparatorId, outcomeId = tco$outcomeId)
-    outcomeModelFile <- file.path(getOutcomeModelFolderPath(cmOutputFolder), outcomeModelFile)
-    om <- readRDS(outcomeModelFile)
-    for(partitionId in 1:numPartitions){
-      balanceFile <- getBalanceFileName(analysisId = params$analysisId, targetId = tco$targetId, comparatorId = tco$comparatorId,
-                                        outcomeId = tco$outcomeId, partitionId = partitionId)
+
+  if (params$balanceApproach == "tco") {
+    loopingObject <- tcos
+  } else {
+    loopingObject <- tcos %>%
+      select(.data$targetId, .data$comparatorId) %>%
+      unique()
+  }
+
+  for(i in 1:nrow(loopingObject)) {
+    row <- loopingObject[i, ]
+
+    for(partitionId in 1:numPartitions) {
+      balanceFile <- getBalanceFileName(analysisId = params$analysisId,
+                                        targetId = row$targetId,
+                                        comparatorId = row$comparatorId,
+                                        outcomeId = if(params$balanceApproach == "tco") row$outcomeId else NULL,
+                                        partitionId = partitionId)
       balanceFile <- file.path(getBalanceFolderPath(analysisFolder),  balanceFile)
 
       bal <- readRDS(balanceFile)
 
 
-      aResult <- c(params$analysisId, partitionId, tco$targetId, tco$comparatorId, tco$outcomeId)
+      aResult <- c(params$analysisId, partitionId, row$targetId, row$comparatorId)
+      if(params$balanceApproach == "tco")
+        aResult <- c(aResult, row$outcomeId)
 
       x <- bal %>%
         filter(isBinary == "Y") %>%
@@ -181,15 +225,6 @@ summarizeAnalysis <- function(params, cmOutputFolder, tcos, balanceStatsToComput
       })
       aResult <- c(aResult, a)
 
-
-      if(!("outcomeModelTreatmentEstimate" %in% names(om))) {
-        aResult <- c(aResult, rep(NA, length(treatmentEstimates)))
-      } else {
-        a <- sapply(treatmentEstimates, function(x) {
-          return(om[["outcomeModelTreatmentEstimate"]][[x]])
-        })
-        aResult <- c(aResult, a)
-      }
       results <- rbind(results, aResult)
     }
   }
@@ -197,21 +232,105 @@ summarizeAnalysis <- function(params, cmOutputFolder, tcos, balanceStatsToComput
   results <- as.data.frame(results)
   names(results) <- colNames
   results <- merge(analyses, results)
-# for particular outcome, combine stratapop files acr
-  ncs <- results[!(results$outcomeId %in% outcomesOfInterest), ] %>%
-    select(c(.data$targetId, .data$outcomeId, .data$logRr, .data$seLogRr)) %>%
-    unique()
-
-  #TODO: question - fitmcmcnull run on NCs across all T-C pairs or one at a time?
-  null <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRr, seLogRr = results$seLogRr)
-  saveRDS(null, nullDistFile)
-
-  ease <- EmpiricalCalibration::computeExpectedAbsoluteSystematicError(null)
-  names(ease) <- c("ease", "easeCiLb", "easeCiUb")
-  results <- cbind(results, ease)
-
   names(results) <- SqlRender::camelCaseToSnakeCase(colnames(results))
-  readr::write_csv(results, file = outputFile)
+  readr::write_csv(results, file = balanceOutputFile)
+  # end balance summarization
+
+
+  # begin ESE generation results
+  results <- NULL
+  colNames <- c("analysisId", "targetId", "comparatorId", "outcomeId")
+  treatmentEstimates <- c("logRr", "logLb95", "logUb95", "seLogRr")
+  colNames <- c(colNames, treatmentEstimates)
+  tcs <- unique(tcos[, c("targetId", "comparatorId")])
+  allResults <-  vector(mode = "list", length = nrow(tcs))
+  for(i in 1:nrow(tcs)) {
+    tc <- tcs[i, ]
+    tcResults <- matrix(, nrow = 0, ncol = length(colNames))
+
+    tcoSubset <- tcos[tcos$targetId == tc$targetId & tcos$comparatorId == tc$comparatorId, ]
+    for(j in 1:nrow(tcoSubset)) {
+      tco <- tcoSubset[j, ]
+      outcomeModelFile <- getOutcomeModelFileName(analysisId = params$analysisId, targetId = tco$targetId, comparatorId = tco$comparatorId, outcomeId = tco$outcomeId)
+      outcomeModelFile <- file.path(getOutcomeModelFolderPath(analysisFolder), outcomeModelFile)
+      om <- readRDS(outcomeModelFile)
+
+      aResult <- c(params$analysisId, tco$targetId, tco$comparatorId, tco$outcomeId)
+
+      if(!("outcomeModelTreatmentEstimate" %in% names(om))) {
+        a <- rep(NA, length(treatmentEstimates))
+      } else {
+        a <- sapply(treatmentEstimates, function(x) {
+          return(om[["outcomeModelTreatmentEstimate"]][[x]])
+        })
+      }
+      aResult <- c(aResult, a)
+      tcResults <- rbind(tcResults, aResult)
+    }
+
+    tcResults <- as.data.frame(tcResults)
+    names(tcResults) <- colNames
+
+    ncs <- tcResults[!(tcResults$outcomeId %in% outcomesOfInterest), ] %>%
+      select(c(.data$targetId, .data$outcomeId, .data$logRr, .data$seLogRr)) %>%
+      unique()
+    null <- EmpiricalCalibration::fitMcmcNull(logRr = ncs$logRr, seLogRr = ncs$seLogRr)
+    ease <- EmpiricalCalibration::computeExpectedAbsoluteSystematicError(null)
+    names(ease) <- c("ease", "easeCiLb", "easeCiUb")
+
+    nullDistFile <- file.path(analysisFolder, getMcmcNullFileName(params$analysisId, tc$targetId, tc$comparatorId))
+    saveRDS(null, nullDistFile)
+
+    tcResults <- cbind(tcResults, ease)
+    allResults[[i]] <- tcResults
+  }
+
+  allResults <- do.call("rbind", allResults)
+  allResults <- merge(analyses, allResults)
+
+  names(allResults) <- SqlRender::camelCaseToSnakeCase(colnames(allResults))
+  readr::write_csv(allResults, file = eseOutputFile)
+
+  # end ESE generation results
+
+
+
+  # begin pop summary generation
+
+  popSummaryFiles <- list.files(path = analysisFolder, pattern = "PopSummary_.*.csv", full.names = TRUE)
+
+  parseAndReadFile <- function(file, includeParams = TRUE) {
+    data <- readr::read_csv(file,  col_types = readr::cols())
+    if (includeParams) {
+      specs <- basename(file) %>%
+        gsub(pattern = "PopSummary_a|t|c|o|\\.csv", replacement = "")
+      specs <- strsplit(specs, "_")[[1]]
+
+      data[, "targetId"] <- specs[[2]]
+      data[, "comparatorId"] <- specs[[3]]
+      # data[, "outcomeId"] <- specs[[4]]
+    }
+    return(data)
+  }
+
+  popResults <- lapply(popSummaryFiles, parseAndReadFile, TRUE)
+  popResults <- do.call("rbind", popResults)
+  t <- popResults %>%
+    group_by(targetId, comparatorId, partition) %>%
+    summarise_at(vars(-group_cols()), mean, na.rm = TRUE) %>%
+    rename(partitionId = partition)
+
+  # t <- popResults %>%
+  #   group_by(partition) %>%
+  #   mutate_all(mean, na.rm = TRUE)
+
+  t[, "analysisId"] <- params$analysisId[[1]]
+
+  names(t) <- SqlRender::camelCaseToSnakeCase(colnames(t))
+  readr::write_csv(t, file = popSummaryOutputFile)
+
+
+  # end pop summary generation
 
   return(NULL)
 }

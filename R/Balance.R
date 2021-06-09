@@ -96,34 +96,6 @@ computeMeansPerGroup <- function(cohorts, cohortMethodData) {
 }
 
 
-#' Compute covariate balance before and after matching and trimming
-#'
-#' @description
-#' For every covariate, prevalence in treatment and comparator groups before and after
-#' matching/trimming are computed. When variable ratio matching was used the balance score will be
-#' corrected according the method described in Austin et al (2008).
-#'
-#'
-#' @param population         A data frame containing the people that are remaining after matching
-#'                           and/or trimming.
-#' @param subgroupCovariateId  Optional: a covariate ID of a binary covariate that indicates a subgroup of
-#'                             interest. Both the before and after populations will be restricted to this
-#'                             subgroup before computing covariate balance.
-#' @details
-#' The population data frame should have the following three columns:
-#'
-#' - rowId (numeric): A unique identifier for each row (e.g. the person ID).
-#' - treatment (integer): Column indicating whether the person is in the target (1) or comparator (0) group.
-#' - propensityScore (numeric): Propensity score.
-#'
-#' @return
-#' Returns a tibble describing the covariate balance before and after matching/trimming.
-#'
-#' @references
-#' Austin, P.C. (2008) Assessing balance in measured baseline covariates when using many-to-one
-#' matching on the propensity-score. Pharmacoepidemiology and Drug Safety, 17: 1218-1225.
-#'
-#' @export
 computeCovariateBalance <- function(population, cohortMethodData, subgroupCovariateId = NULL, includeBefore = FALSE) {
   ParallelLogger::logTrace("Computing covariate balance")
   start <- Sys.time()
@@ -284,66 +256,3 @@ computeCovariateBalanceFeatureExtraction <- function(population, cohortMethodDat
   return(balance)
 }
 
-
-
-computeCovariateBalanceFeatureExtractionOther <- function(population, allCov, cohortMethodData) {
-
-
-  # cohortMethodData$pop <- population
-  cohortMethodData$popCov <- allCov %>%
-    inner_join(select(population, .data$rowId, .data$treatment), by = "rowId")
-  # cohortMethodData$pop <- NULL
-
-  # get covariate data for target
-  targetPop <- population %>%
-    filter(.data$treatment == 1)
-  targetPopCov <- Andromeda::andromeda(covariateRef = cohortMethodData$covariateRef,
-                                       analysisRef = cohortMethodData$analysisRef)
-  attr(targetPopCov, "metaData") <- attr(cohortMethodData, "metaData")
-  class(targetPopCov) <- "CohortMethodData"
-
-  # cohortMethodData$pop <- targetPop %>%
-  #   select(.data$rowId)
-  # targetPopCov$covariates <- cohortMethodData$pop %>%
-  #   inner_join(cohortMethodData$covariates, by = "rowId")
-  # cohortMethodData$pop <- NULL
-  targetPopCov$covariates <- cohortMethodData$popCov %>%
-    filter(.data$treatment == 1)
-
-
-  attr(targetPopCov, "metaData")$populationSize <- nrow(targetPop)
-
-  # get covariate data for popoulation treatment 1
-  comparatorPop <- population %>%
-    filter(.data$treatment == 0)
-  comparatorPopCov <- Andromeda::andromeda(covariateRef = cohortMethodData$covariateRef,
-                                           analysisRef = cohortMethodData$analysisRef)
-  attr(comparatorPopCov, "metaData") <- attr(cohortMethodData, "metaData")
-  class(comparatorPopCov) <- "CohortMethodData"
-
-  # cohortMethodData$pop <- comparatorPop
-  # comparatorPopCov$covariates <- cohortMethodData$covariates %>%
-  #   inner_join(cohortMethodData$pop, by = "rowId")
-  # cohortMethodData$pop <- NULL
-  comparatorPopCov$covariates <- cohortMethodData$popCov %>%
-    filter(.data$treatment == 0)
-
-  attr(comparatorPopCov, "metaData")$populationSize <- nrow(comparatorPop)
-
-  # aggregate both
-  targetPopulationCovariateAgg <- FeatureExtraction::aggregateCovariates(targetPopCov)
-  comparatorPopulationCovariateAgg <- FeatureExtraction::aggregateCovariates(comparatorPopCov)
-
-
-  # compute balance
-  balance <- FeatureExtraction::computeStandardizedDifference(targetPopulationCovariateAgg,
-                                                              comparatorPopulationCovariateAgg)
-
-  balance <- cohortMethodData$analysisRef %>%
-    select("analysisId", "isBinary", "missingMeansZero") %>%
-    inner_join(select(cohortMethodData$covariateRef, "analysisId", "covariateId")) %>%
-    collect() %>%
-    inner_join(balance)
-
-  return(balance)
-}

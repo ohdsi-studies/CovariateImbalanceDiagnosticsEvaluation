@@ -1,35 +1,36 @@
 Package: CovarBalDiagEval
 Type: Package
-Title: Evaluating the use of standardized difference of means (SDM) to measure covariate balance.
+Title: Evaluating the fitness of various statistics to measure covariate balance.
 Version: 0.0.1
 Author: Joshua Ide [aut, cre]
 Maintainer: Joshua Ide <jdi212@lehigh.edu>
-Description: Evaluating the use of standardized difference of means (SDM) to measure covariate balance.
+Description: A framework for evaluating the use of different statistics (starting with standardized mean difference [SMD]) to measure covariate balance.
 Depends:
-    R(>= 3.5.0),
-    DatabaseConnector (>= 3.0.0)
+    R,
+    DatabaseConnector
 Imports:
-    SqlRender (>= 1.6.8),
-    EmpiricalCalibration (>= 2.0.2),
-    Cyclops (>= 3.0.0),
-    FeatureExtraction (>= 3.1.1),
-    CohortMethod (>= 4.1.0),
+    SqlRender,
+    EmpiricalCalibration,
+    Cyclops,
+    FeatureExtraction,
+    CohortMethod,
     ggplot2,
-    Andromeda (>= 0.3.2),
+    Andromeda,
     dplyr,
     tibble,
     readr,
     rlang,
-    MethodEvaluation (>= 2.0.0),
-    OhdsiSharing (>= 0.2.2),
-	ParallelLogger (>= 2.0.0),
+    MethodEvaluation,
+    OhdsiSharing,
+	ParallelLogger,
 	survival,
 	plyr
 Suggests:
     knitr,
     rmarkdown,
     DT,
-    shiny
+    shiny,
+    reactable
 Remotes:
     ohdsi/FeatureExtraction,
     ohdsi/CohortMethod,

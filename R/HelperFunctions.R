@@ -54,6 +54,10 @@ getBalanceFolderPath <- function(anAnalysisDir, makeIfNotFound = TRUE) {
   return(path)
 }
 
+getAnalysisFolderPath <- function(cmOutputFolder, analysisId) {
+  return(file.path(cmOutputFolder, sprintf("Analysis_%d", analysisId)))
+}
+
 
 getSampleFolderPath <- function(outputFolder, makeIfNotFound = TRUE) {
   path <- file.path(outputFolder, "cmSample")
@@ -62,7 +66,8 @@ getSampleFolderPath <- function(outputFolder, makeIfNotFound = TRUE) {
   return(path)
 }
 
-getResultsFolderPath <- function(outoutFolder, makeIfNotFound = TRUE) {
+
+getResultsFolderPath <- function(outputFolder, makeIfNotFound = TRUE) {
   path <- file.path(outputFolder, "results")
   if(makeIfNotFound)
     maybeMakeDir(path)
@@ -150,7 +155,7 @@ getStrataFileName <- function(targetId, comparatorId, outcomeId, analysisId=NULL
   )
 }
 
-getBalanceFileName <- function(analysisId, targetId, comparatorId, outcomeId, partitionId = NULL) {
+getBalanceFileName <- function(analysisId, targetId, comparatorId, outcomeId = NULL, partitionId = NULL) {
   if(is.null(partitionId)) {
     if(is.null(outcomeId))
       return(sprintf("bal_a%d_t%d_c%d.rds", analysisId, targetId, comparatorId))
@@ -174,9 +179,21 @@ getOutcomeModelFileName <- function(analysisId, targetId, comparatorId, outcomeI
   )
 }
 
-getAnalysisSummaryFileName <- function(analysisId) {
+getAnalysisBalanceSummaryFileName <- function(analysisId) {
   return(
-    sprintf("analysis_%d_results.csv", analysisId)
+    sprintf("analysis_%d_balance_results.csv", analysisId)
+  )
+}
+
+getAnalysisEseSummaryFileName <- function(analysisId) {
+  return(
+    sprintf("analysis_%d_ese_results.csv", analysisId)
+  )
+}
+
+getAnalysisPopSummarySummaryFileName <- function(analysisId) {
+  return(
+    sprintf("analysis_%d_pop_summary.csv", analysisId)
   )
 }
 
@@ -186,9 +203,28 @@ getPopSummaryFileName <- function(analysisId, targetId, comparatorId, outcomeId)
   )
 }
 
-getMcmcNullFileName <- function(analysisId) {
+getMcmcNullFileName <- function(analysisId, targetId, comparatorId) {
   return(
-    sprintf("analysis_%d_mcmc_null.rds", analysisId)
+    sprintf("analysis_a%d_t%d_c%d_mcmc_null.rds", analysisId, targetId, comparatorId)
+  )
+}
+
+
+getCombinedBalanceFileName <- function(databaseId) {
+  return(
+    sprintf("balance_results_%s.csv", databaseId)
+  )
+}
+
+getCombinedEseFileName <- function(databaseId) {
+  return(
+    sprintf("ese_results_%s.csv", databaseId)
+  )
+}
+
+getCombinedPopFileName <- function(databaseId) {
+  return(
+    sprintf("pop_results_%s.csv", databaseId)
   )
 }
 

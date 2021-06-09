@@ -3,7 +3,7 @@ library(magrittr)
 # populationSampleSizes <- c(1, 2, 5, 10, 20, 30, 40, 60, 70, 80, 90, 100)
 populationSamplePercs <- c(1, 2, 5, 10, 20)
 psAdjustments <- c("matchOnPs", "crude", "random")
-balanceApproach <- "tco"
+balanceApproach <- "partition" #TODO: change as necessary
 
 
 analyses <- expand.grid(populationSamplePercs, psAdjustments)
