@@ -24,7 +24,8 @@ Imports:
     OhdsiSharing,
 	ParallelLogger,
 	survival,
-	plyr
+	plyr,
+	RJSONIO
 Suggests:
     knitr,
     rmarkdown,

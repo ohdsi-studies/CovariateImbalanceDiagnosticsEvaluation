@@ -26,14 +26,23 @@ fluidPage(
                   selected = "mean")
     ),
     mainPanel(
-      plotOutput(outputId = "mainPlot"),
+      plotOutput(outputId = "mainPlot", height = "auto"),
       tabsetPanel(
         tabPanel(
+          "Population Summary",
+          style = "margin-top:10px",
+          span("** Averaged and rounded across TCO(s), partitions***",
+               style = "font-weight:bold;"),
+          reactableOutput(outputId = "popSummaryTable")
+        ),
+        tabPanel(
           "Balance Results",
+          style = "margin-top:10px",
           reactableOutput(outputId = "balanceResultsTable")
         ),
         tabPanel(
           "CohortMethod/ESE Results",
+          style = "margin-top:10px",
           reactableOutput(outputId = "eseResultsTable")
 
         )

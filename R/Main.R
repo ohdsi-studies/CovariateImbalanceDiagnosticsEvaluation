@@ -88,7 +88,7 @@ execute <- function(connectionDetails,
 
 
   # create cohorts (exposure, outcome, negative controls)
-  if (createCohorts && !file.exists(getCohortCountsFile(outputFolder))) {
+  if (createCohorts) {
     if (verbose)
       ParallelLogger::logInfo("Creating exposure, outcome, and negative control cohorts")
     createCohorts(connectionDetails = connectionDetails,
@@ -96,7 +96,8 @@ execute <- function(connectionDetails,
                   cohortDatabaseSchema = cohortDatabaseSchema,
                   cohortTable = cohortTable,
                   outputFolder = outputFolder,
-                  packageName = packageName)
+                  packageName = packageName,
+                  verbose = verbose)
 
   }
 
@@ -147,7 +148,7 @@ execute <- function(connectionDetails,
                     randomSeed = randomSeed)
   }
 
-  if(synthesizeResults) {
+  if(synthesizeAndExportResults) {
     if(verbose)
       ParallelLogger::logInfo("Exporting results")
     synthesizeAndExportResults(resultsFolder = getResultsFolderPath(outputFolder = outputFolder),

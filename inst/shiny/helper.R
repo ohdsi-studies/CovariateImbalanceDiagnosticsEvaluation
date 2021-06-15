@@ -16,3 +16,17 @@ getBalanceFeasibleStatistics <- function(results) {
   return(setdiff(colnames(results),
          colsToOmit))
 }
+
+
+getInputObject <- function() {
+  return(
+    list(
+      targetName = "NewUsersOfAceInhibitors",
+      comparatorName = "NewUsersOfBetaBlockers",
+      databaseId = "OPTUM_DOD",
+      psAdjustment = c("matchOnPs", "crude", "random"),
+      balanceAggregateStatistic = "smdMaxDichotomous",
+      partitionAggregation = "mean"
+    )
+  )
+}
